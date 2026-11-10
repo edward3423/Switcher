@@ -21,7 +21,7 @@ A fast, lightweight Cmd+Tab replacement for macOS. No bloat, no lag, no memory l
 - ✅ Instant response (<16ms)
 - ✅ Light memory footprint (releases its UI when idle)
 - ✅ Negligible background CPU (a lightweight permission check, no window polling)
-- ✅ Keyboard shortcuts: H to hide, Q to quit, M to minimize, Cmd+, for Preferences, Shift to go back
+- ✅ Keyboard shortcuts: H to hide, Q to quit, M to minimize, W to close windows (app keeps running), Cmd+, for Preferences, Shift to go back
 - ✅ Mouse support: hover to select, click to activate
 - ✅ Multi-monitor: appears on screen where your pointer is
 - ✅ Optional: show only your N most recent apps — Cmd+Opt+Tab reveals the rest when you need them
@@ -86,6 +86,7 @@ Open **Preferences** (menu bar ⌘) and tick **Start at login** (macOS 13+). Or 
 | H | Hide selected app |
 | Q | Quit selected app |
 | M | Minimize selected app's windows |
+| W | Close selected app's windows (without quitting it) |
 | , | Open Preferences |
 | Return | Activate |
 | Escape | Dismiss |

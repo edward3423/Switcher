@@ -94,6 +94,7 @@ class HotkeyManager {
         case m = 12         // Cmd+M - minimize every window of the selected app
         case comma = 13     // Cmd+, - open Preferences (the macOS-wide convention)
         case showAll = 14   // Cmd+Opt+Tab - open/expand the full uncapped list
+        case w = 15         // Cmd+W - close every window of the selected app (app keeps running)
     }
 
     // Map hotkey IDs to key codes for delegate
@@ -102,6 +103,7 @@ class HotkeyManager {
         HotkeyID.h.rawValue: UInt16(kVK_ANSI_H),
         HotkeyID.q.rawValue: UInt16(kVK_ANSI_Q),
         HotkeyID.m.rawValue: UInt16(kVK_ANSI_M),
+        HotkeyID.w.rawValue: UInt16(kVK_ANSI_W),
         HotkeyID.comma.rawValue: UInt16(kVK_ANSI_Comma),
         HotkeyID.leftArrow.rawValue: UInt16(kVK_LeftArrow),
         HotkeyID.rightArrow.rawValue: UInt16(kVK_RightArrow),
@@ -113,11 +115,11 @@ class HotkeyManager {
 
     // Ordinary Cmd+<key> combos that have no switcher action. Registered as no-op
     // Carbon hotkeys while the panel is open so they're swallowed instead of leaking
-    // to the app behind the panel (e.g. Cmd+W closing a tab). Excludes the action
-    // keys (Tab/H/Q/arrows/Escape/Return), which are registered separately.
+    // to the app behind the panel (e.g. Cmd+S saving a document). Excludes the action
+    // keys (Tab/H/Q/M/W/arrows/Escape/Return), which are registered separately.
     private static let swallowKeyCodes: [Int] = [
         kVK_ANSI_A, kVK_ANSI_S, kVK_ANSI_D, kVK_ANSI_F, kVK_ANSI_G, kVK_ANSI_Z,
-        kVK_ANSI_X, kVK_ANSI_C, kVK_ANSI_V, kVK_ANSI_B, kVK_ANSI_W, kVK_ANSI_E,
+        kVK_ANSI_X, kVK_ANSI_C, kVK_ANSI_V, kVK_ANSI_B, kVK_ANSI_E,
         kVK_ANSI_R, kVK_ANSI_Y, kVK_ANSI_T, kVK_ANSI_O, kVK_ANSI_U, kVK_ANSI_I,
         kVK_ANSI_P, kVK_ANSI_L, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_N,
         kVK_ANSI_0, kVK_ANSI_1, kVK_ANSI_2, kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_5,
@@ -170,6 +172,7 @@ class HotkeyManager {
             (.h, kVK_ANSI_H),
             (.q, kVK_ANSI_Q),
             (.m, kVK_ANSI_M),
+            (.w, kVK_ANSI_W),
             (.comma, kVK_ANSI_Comma),
             (.leftArrow, kVK_LeftArrow),
             (.rightArrow, kVK_RightArrow),
@@ -198,7 +201,7 @@ class HotkeyManager {
 
         // These ids are absent from `hotkeyToKeyCode`, so the Carbon handler no-ops
         // them — registration alone consumes the keystroke. The 0x1000 offset keeps
-        // them clear of the action ids (1–13).
+        // them clear of the action ids (1–15).
         for keyCode in HotkeyManager.swallowKeyCodes {
             var ref: EventHotKeyRef?
             let id = EventHotKeyID(signature: HotkeyManager.signature, id: UInt32(0x1000 + keyCode))

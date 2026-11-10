@@ -2,8 +2,8 @@ import Cocoa
 
 /// Actions performed ON another app's windows, via Accessibility.
 ///
-/// AX is the only way to minimize someone else's window — there is no
-/// `NSRunningApplication.minimize()`. That means calling INTO the target app, so
+/// AX is the only way to minimize or close someone else's window — there is no
+/// `NSRunningApplication.minimize()` or `.closeWindows()`. That means calling INTO the target app, so
 /// unlike the WindowServer query used for *reading* minimized state, these calls
 /// can stall for as long as that app is busy. Fine here: this runs once, on
 /// deliberate user input, never on the hot path — and it still runs off the main
@@ -56,6 +56,44 @@ enum WindowActions {
                 guard !alreadyMinimized else { continue }
 
                 AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
+            }
+        }
+    }
+
+    /// Close every window of an app that Accessibility can reach, leaving the
+    /// process running — the W shortcut, i.e. clicking each window's red button.
+    ///
+    /// Presses each window's `kAXCloseButton` rather than sending Cmd+W, so it
+    /// closes whole windows (not just the current tab) and needs no focus change.
+    /// An app with unsaved changes may answer with a save sheet instead of
+    /// closing; that is its call to make, and the window stays until answered.
+    ///
+    /// Same limits as `minimizeAllWindows`: only windows on the CURRENT Space are
+    /// reachable, and the work runs on a background queue with a bounded AX
+    /// timeout. Windows without a close button (some panels, fullscreen windows
+    /// on certain apps) are skipped and keep the app listed — honest, since they
+    /// are still open.
+    static func closeAllWindows(ofPID pid: pid_t) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let app = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(app, axTimeout)
+
+            var windowsValue: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsValue) == .success,
+                  let windows = windowsValue as? [AXUIElement] else {
+                return
+            }
+
+            for window in windows {
+                var buttonValue: CFTypeRef?
+                guard AXUIElementCopyAttributeValue(
+                        window, kAXCloseButtonAttribute as CFString, &buttonValue) == .success,
+                      let buttonRef = buttonValue,
+                      CFGetTypeID(buttonRef) == AXUIElementGetTypeID() else {
+                    continue
+                }
+                let button = buttonRef as! AXUIElement
+                AXUIElementPerformAction(button, kAXPressAction as CFString)
             }
         }
     }

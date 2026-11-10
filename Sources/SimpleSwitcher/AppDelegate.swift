@@ -23,7 +23,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate, AppSw
     // Polls for newly-opened apps while the panel is shown, so their icons appear as
     // soon as their windows render (see startAppListRefresh).
     private var appListRefreshTimer: DispatchSourceTimer?
-    // Apps the user removed with H / Q / M during THIS panel session. The live
+    // Apps the user removed with H / Q / M / W during THIS panel session. The live
     // refresh must never re-add them: those actions all complete asynchronously,
     // so getVisibleApps() keeps reporting the app for a while afterwards — and
     // since it is no longer in currentApps, the refresh would mistake it for a
@@ -174,7 +174,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate, AppSw
         panel.showWithApps(currentApps, selectIndex: selectIndex)
 
         state = .active
-        // Register active-only hotkeys (H, Q, arrows, etc.)
+        // Register active-only hotkeys (H, Q, M, W, arrows, etc.)
         hotkeyManager.registerActiveHotkeys()
         // Mirror apps opened while the panel is up (they're missing from the initial
         // snapshot until their windows render).
@@ -257,6 +257,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate, AppSw
 
         case kVK_ANSI_M:
             minimizeSelectedApp()
+
+        case kVK_ANSI_W:
+            closeSelectedAppWindows()
 
         case kVK_ANSI_Q:
             quitSelectedApp()
@@ -351,6 +354,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate, AppSw
         }
     }
 
+    /// W: close every window of the selected app and drop it from the panel,
+    /// WITHOUT quitting it. Once no windows remain, the window filter leaves the
+    /// app out of the next Cmd+Tab too (unless a Dock badge rescues it).
+    private func closeSelectedAppWindows() {
+        guard let appToClose = panel.removeSelectedApp() else { return }
+
+        WindowActions.closeAllWindows(ofPID: appToClose.pid)
+        actedOnPIDs.insert(appToClose.pid)
+        currentApps.removeAll { $0.pid == appToClose.pid }
+
+        if !panel.hasApps {
+            dismissPanel()
+        }
+    }
+
     private func quitSelectedApp() {
         guard let appToQuit = panel.removeSelectedApp() else { return }
 
@@ -419,7 +437,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, HotkeyManagerDelegate, AppSw
     /// make room — `appendApps` only ever grows the grid — so without this the
     /// panel walks past the limit as apps launch.
     ///
-    /// Apps removed with H/Q/M count against the allowance (via `actedOnPIDs`)
+    /// Apps removed with H/Q/M/W count against the allowance (via `actedOnPIDs`)
     /// rather than freeing a slot. Otherwise culling app #3 would promote the old
     /// #6 into range and the refresh would pop it in ~300ms later, refilling the
     /// panel as fast as the user empties it. Removals stay monotonic within a

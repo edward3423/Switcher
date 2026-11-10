@@ -29,7 +29,7 @@ Sources/SimpleSwitcher/
 ├── LoginItem.swift      # "Start at login" via SMAppService (macOS 13+)
 ├── StatusBarController.swift     # Optional menu bar icon (NSStatusItem) + menu
 ├── PreferencesWindowController.swift # Programmatic Preferences window
-├── WindowActions.swift  # AX actions on other apps' windows (minimize)
+├── WindowActions.swift  # AX actions on other apps' windows (minimize, close)
 └── PrivateAPIs.swift    # CGSSetSymbolicHotKeyEnabled binding
 
 Sources/SwitcherKernels/    # pure logic, no AppKit / no IPC / no state
@@ -77,8 +77,8 @@ swift-testing is mechanical — one `Check` call per assertion.
 **AppDelegate.swift**
 - State machine: `idle` <-> `active`
 - Coordinates HotkeyManager and AppSwitcherPanel
-- Handles keyboard shortcuts (Tab, Shift, Arrows, H, Q, Escape, Return)
-- **Live app-list refresh** (`startAppListRefresh`, ~300ms while the panel is open): appends apps whose windows have since rendered. Strictly append-only — it never removes or reorders, so it can't fight the user's own H/Q/M. `remainingSlots()` bounds it under the recent-apps cap, because the panel has no removal-by-pid path (`appendApps` only grows the grid) and would otherwise walk past N. Apps removed with H/Q/M count against the allowance via `actedOnPIDs` rather than freeing a slot — otherwise culling app #3 promotes the old #6 and the panel refills as fast as you empty it. Removals stay monotonic within a session; the next Cmd+Tab is a fresh snapshot at full N. The append pass itself is `appendNewlyVisibleApps()`, shared with the ⌥⌘Tab expansion (`expandToFullList()`): the `expandedSession` flag — decided afresh on every open, set by expansion — switches the pass's source to `allVisibleApps()` and makes `remainingSlots()` unbounded, so an expanded session stays uncapped for the refresh too
+- Handles keyboard shortcuts (Tab, Shift, Arrows, H, Q, M, W, Escape, Return)
+- **Live app-list refresh** (`startAppListRefresh`, ~300ms while the panel is open): appends apps whose windows have since rendered. Strictly append-only — it never removes or reorders, so it can't fight the user's own H/Q/M/W. `remainingSlots()` bounds it under the recent-apps cap, because the panel has no removal-by-pid path (`appendApps` only grows the grid) and would otherwise walk past N. Apps removed with H/Q/M/W count against the allowance via `actedOnPIDs` rather than freeing a slot — otherwise culling app #3 promotes the old #6 and the panel refills as fast as you empty it. Removals stay monotonic within a session; the next Cmd+Tab is a fresh snapshot at full N. The append pass itself is `appendNewlyVisibleApps()`, shared with the ⌥⌘Tab expansion (`expandToFullList()`): the `expandedSession` flag — decided afresh on every open, set by expansion — switches the pass's source to `allVisibleApps()` and makes `remainingSlots()` unbounded, so an expanded session stays uncapped for the refresh too
 - Handles mouse clicks (inside panel = activate clicked app, outside = dismiss)
 - **Permission gating**: never disables native Cmd+Tab until the event tap is alive
   - `enableSwitching()`: creates the tap FIRST, and only then disables native Cmd+Tab + registers the Cmd+Tab hotkey (order matters)
@@ -95,7 +95,7 @@ swift-testing is mechanical — one `Check` call per assertion.
 - **`.listenOnly` (passive) CGEvent tap**: the window server never waits on it, so revoking Accessibility while it's alive cannot freeze input (an active `.defaultTap` can — forums thread 735204). Trade-off: a passive tap can't consume events — outside clicks are instead swallowed by AppSwitcherPanel's invisible per-screen click-shield windows (see below), which turn click-away into a plain dismiss.
 - On `tapDisabledByUserInput`/`tapDisabledByTimeout` (benign throttling) it just re-enables the tap
 - **Sticky-panel defense (two layers)**: dismissal rides the tap's Cmd-up `flagsChanged`, but that single event can be dropped (e.g. tap disabled by timeout at the instant of release), leaving the panel stuck open. Layer 1: the tap runs on a dedicated high-priority thread so its callback isn't starved by main-thread UI work. Layer 2: `startCmdWatchdog()` — a ~100ms poll of `CGEventSource.flagsState(.combinedSessionState)` that runs only while the panel is active (started in `registerActiveHotkeys()`, stopped in `unregisterActiveHotkeys()`) and dismisses if Cmd is no longer physically held, independent of event delivery. Double-dismiss is safe: both paths hit the serial main queue and `modifierKeyReleased()`/`dismissPanel()` guard on state.
-- Dynamically registers/unregisters other hotkeys (H, Q, arrows, Escape, Return) when panel is shown/hidden
+- Dynamically registers/unregisters other hotkeys (H, Q, M, W, arrows, Escape, Return) when panel is shown/hidden
   - `registerActiveHotkeys()` called when panel opens
   - `unregisterActiveHotkeys()` called when panel closes
   - This ensures Cmd+H/Q work normally in other apps when panel is not showing
@@ -139,6 +139,7 @@ swift-testing is mechanical — one `Check` call per assertion.
 - **The wait is macOS's animation, not our loop.** Issuing minimize for 12 windows takes ~2.8ms; the Dock then animates them in one at a time over ~6s. Issuing concurrently changed the total by <10%, so the sequential loop stays. Nothing in Switcher can make this instant — **H (hide) is the instant alternative**, which is the real difference between the two keys
 - Minimizes **every** window, not just the frontmost: the switcher only drops an app once none of its windows survive, so a partial minimize would leave it listed and make the key look broken
 - Fullscreen windows refuse to minimize (macOS behavior), so such an app stays listed — honest, since it is still on screen somewhere
+- `closeAllWindows(ofPID:)` — the W shortcut. Presses each window's `kAXCloseButton` (the red button), so whole windows close, not just a tab, and the app keeps running. Same Space limit and background-queue/timeout rules as minimize. An app with unsaved changes may show a save sheet instead of closing; that window stays until answered. A Dock badge still rescues the app on the next Cmd+Tab
 
 **Preferences.swift**
 - `enum Preferences`: single source of truth for persisted settings over `UserDefaults.standard`
@@ -292,6 +293,7 @@ Cmd+Shift+Tab from **idle** opens the switcher selecting the last (least recentl
 | H | Hide selected app |
 | ⌥⌘H | Hide all other apps (declutter), then dismiss |
 | M | Minimize the selected app's windows **on the current Space** (see WindowActions) |
+| W | Close all of the selected app's windows **on the current Space**, without quitting it |
 | Q | Quit selected app |
 | , | Dismiss and open Preferences (the macOS-wide Cmd+, convention) |
 | Return | Activate selected app |
